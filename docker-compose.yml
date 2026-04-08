@@ -1,0 +1,22 @@
+services:
+
+  modbus-sim:
+    build: ./simulator
+    ports:
+      - "502:502"
+
+  nodered:
+    image: nodered/node-red:latest
+    ports:
+      - "1880:1880"
+    volumes:
+      - ./nodered-flows:/data
+    depends_on:
+      - modbus-sim
+      - emqx
+
+  emqx:
+    image: emqx:5
+    ports:
+      - "1883:1883"
+      - "18083:18083"
