@@ -1,0 +1,116 @@
+[
+  {
+    "id": "tab_process",
+    "type": "tab",
+    "label": "EMS — Process (Water/Fuel/Steam)",
+    "disabled": false
+  },
+  {
+    "id": "mqtt_in_water",
+    "type": "mqtt in",
+    "z": "tab_process",
+    "name": "MQTT In — water",
+    "topic": "mdt/+/water/+/telemetry",
+    "qos": "1",
+    "broker": "emqx_broker",
+    "x": 100, "y": 80,
+    "wires": [["parse_process"]]
+  },
+  {
+    "id": "mqtt_in_fuel",
+    "type": "mqtt in",
+    "z": "tab_process",
+    "name": "MQTT In — fuel",
+    "topic": "mdt/+/fuel/+/telemetry",
+    "qos": "1",
+    "broker": "emqx_broker",
+    "x": 100, "y": 140,
+    "wires": [["parse_process"]]
+  },
+  {
+    "id": "mqtt_in_steam",
+    "type": "mqtt in",
+    "z": "tab_process",
+    "name": "MQTT In — steam",
+    "topic": "mdt/+/steam/+/telemetry",
+    "qos": "1",
+    "broker": "emqx_broker",
+    "x": 100, "y": 200,
+    "wires": [["parse_process"]]
+  },
+  {
+    "id": "parse_process",
+    "type": "function",
+    "z": "tab_process",
+    "name": "Parse & Route",
+    "func": "const d = JSON.parse(msg.payload);\nif (!d.device_id || !d.device_type) return null;\nmsg.payload = d;\nmsg.device_type = d.device_type;\nreturn msg;",
+    "x": 340, "y": 140,
+    "wires": [["derive_process"]]
+  },
+  {
+    "id": "derive_process",
+    "type": "function",
+    "z": "tab_process",
+    "name": "Derived Process Metrics + Alarms",
+    "func": "const d = msg.payload;\nconst t = d.device_type;\n\nif (t === 'water') {\n  d.flow_rate_ls = +(d.flow_rate_m3h / 3.6).toFixed(3);\n  if (d.ph_value !== undefined && (d.ph_value < 6.5 || d.ph_value > 8.5)) {\n    node.warn(`pH alarm: ${d.ph_value} on ${d.device_id}`);\n    d.ph_alarm = true;\n  }\n  d.conductivity_alarm = d.conductivity_us > 1000;\n}\n\nif (t === 'fuel') {\n  if (d.fuel_flow_lh > 0.1 && d.fuel_level_liters) {\n    d.autonomy_hours = +(d.fuel_level_liters / d.fuel_flow_lh).toFixed(1);\n  }\n  d.level_low_alarm = d.fuel_level_pct < 20;\n  if (d.level_low_alarm) node.warn(`LOW FUEL: ${d.fuel_level_pct}% on ${d.device_id}`);\n}\n\nif (t === 'steam') {\n  if (d.steam_flow_kgh && d.steam_enthalpy_kjkg) {\n    d.thermal_power_kw = +((d.steam_flow_kgh / 3600) * d.steam_enthalpy_kjkg).toFixed(1);\n  }\n  d.pressure_alarm = d.steam_pressure_bar > 12.0;\n  d.efficiency_alarm = d.boiler_efficiency_pct < 80.0;\n  if (d.pressure_alarm) node.warn(`Steam pressure high: ${d.steam_pressure_bar} bar on ${d.device_id}`);\n}\n\nmsg.payload = d;\nreturn msg;",
+    "x": 580, "y": 140,
+    "wires": [["build_inserts_process"]]
+  },
+  {
+    "id": "build_inserts_process",
+    "type": "function",
+    "z": "tab_process",
+    "name": "Build Multi-Metric Inserts",
+    "func": "const d = msg.payload;\nconst t = d.device_type;\nconst ts = new Date(d.ts).toISOString();\n\nconst metricMap = {\n  water: [\n    ['flow_rate_m3h', d.flow_rate_m3h],\n    ['total_volume_m3', d.total_volume_m3],\n    ['pressure_bar', d.pressure_bar],\n    ['temperature_c', d.temperature_c],\n    ['conductivity_us', d.conductivity_us],\n    ['ph_value', d.ph_value],\n    ['valve_position_pct', d.valve_position_pct],\n    ['flow_rate_ls', d.flow_rate_ls],\n  ],\n  fuel: [\n    ['fuel_flow_lh', d.fuel_flow_lh],\n    ['fuel_level_pct', d.fuel_level_pct],\n    ['fuel_level_liters', d.fuel_level_liters],\n    ['fuel_pressure_bar', d.fuel_pressure_bar],\n    ['fuel_temperature_c', d.fuel_temperature_c],\n    ['specific_consumption', d.specific_consumption],\n    ['autonomy_hours', d.autonomy_hours],\n  ],\n  steam: [\n    ['steam_flow_kgh', d.steam_flow_kgh],\n    ['steam_pressure_bar', d.steam_pressure_bar],\n    ['steam_temperature_c', d.steam_temperature_c],\n    ['steam_enthalpy_kjkg', d.steam_enthalpy_kjkg],\n    ['steam_energy_kwh', d.steam_energy_kwh],\n    ['thermal_power_kw', d.thermal_power_kw],\n    ['boiler_efficiency_pct', d.boiler_efficiency_pct],\n    ['blowdown_conductivity', d.blowdown_conductivity],\n    ['makeup_water_m3h', d.makeup_water_m3h],\n  ],\n};\n\nconst metrics = metricMap[t] || [];\nconst messages = metrics\n  .filter(([_, v]) => v !== undefined && v !== null)\n  .map(([metric, value]) => ({\n    payload: {\n      query: 'INSERT INTO raw_measurements(time,device_id,device_type,site_id,metric,value,quality) VALUES($1,$2,$3,$4,$5,$6,$7)',\n      params: [ts, d.device_id, t, d.site_id, metric, value, d.quality]\n    }\n  }));\nreturn [messages];",
+    "x": 820, "y": 140,
+    "wires": [["tsdb_write_process"]]
+  },
+  {
+    "id": "tsdb_write_process",
+    "type": "postgresql",
+    "z": "tab_process",
+    "name": "Write TimescaleDB",
+    "postgreConfig": "tsdb_config",
+    "x": 1040, "y": 140,
+    "wires": [[]]
+  },
+  {
+    "id": "modbus_poll",
+    "type": "modbus-read",
+    "z": "tab_process",
+    "name": "Modbus Poll — meter_01",
+    "topic": "modbus_validate",
+    "showStatusActivities": false,
+    "logIOActivities": false,
+    "server": "modbus_server",
+    "unitid": "1",
+    "dataType": "HoldingRegister",
+    "adr": "0",
+    "quantity": "26",
+    "rate": "5",
+    "rateUnit": "s",
+    "x": 100, "y": 320,
+    "wires": [["modbus_decode"], []]
+  },
+  {
+    "id": "modbus_decode",
+    "type": "function",
+    "z": "tab_process",
+    "name": "Decode Registers & Cross-validate",
+    "func": "function regsToFloat(hi, lo) {\n  const buf = new ArrayBuffer(4);\n  const view = new DataView(buf);\n  view.setUint16(0, hi);\n  view.setUint16(2, lo);\n  return view.getFloat32(0, false);\n}\nconst regs = msg.payload.data;\nif (!regs || regs.length < 2) return null;\nconst kw_modbus = regsToFloat(regs[0], regs[1]);\nconst kw_mqtt = context.get('last_kw_meter_01') || 0;\nif (Math.abs(kw_modbus - kw_mqtt) > 5.0) {\n  node.warn(`Modbus/MQTT mismatch meter_01: Modbus=${kw_modbus.toFixed(1)} MQTT=${kw_mqtt.toFixed(1)}`);\n}\nmsg.payload = { kw_modbus, kw_mqtt, delta: Math.abs(kw_modbus - kw_mqtt) };\nreturn msg;",
+    "x": 380, "y": 320,
+    "wires": [[]]
+  },
+  {
+    "id": "modbus_server",
+    "type": "modbus-client",
+    "name": "EMS Simulator",
+    "clienttype": "tcp",
+    "bufferCommands": true,
+    "stateLogEnabled": false,
+    "tcpHost": "simulator",
+    "tcpPort": "502",
+    "tcpType": "DEFAULT",
+    "unit_id": "1"
+  }
+]

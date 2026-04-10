@@ -33,4 +33,4 @@ def loop():
         time.sleep(2)
 
 threading.Thread(target=loop, daemon=True).start()
-StartTcpServer(context=context, address=("0.0.0.0", 502))
+StartTcpServer(context=context, address=("0.0.0.0", 1502))
