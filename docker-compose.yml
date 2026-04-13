@@ -1,0 +1,34 @@
+services:
+  nodered:
+    image: nodered/node-red
+    ports:
+      - "1880:1880"
+    volumes:
+      - nodered-data:/data
+    networks:
+      - iot-net
+    depends_on:
+      - modbus-sim
+      - emqx
+
+  modbus-sim:
+    build: ./simulator
+    command: python server.py
+    ports:
+      - "1502:1502"
+    networks:
+      - iot-net
+
+  emqx:
+    image: emqx/emqx
+    ports:
+      - "18083:18083"
+    networks:
+      - iot-net
+
+networks:
+  iot-net:
+    driver: bridge
+    
+volumes:
+  nodered-data:

@@ -1,0 +1,89 @@
+[
+  {
+    "id": "tab_electric",
+    "type": "tab",
+    "label": "EMS — Electric",
+    "disabled": false
+  },
+  {
+    "id": "mqtt_in_electric",
+    "type": "mqtt in",
+    "z": "tab_electric",
+    "name": "MQTT In — meters",
+    "topic": "mdt/+/meters/+/telemetry",
+    "qos": "1",
+    "broker": "emqx_broker",
+    "x": 100, "y": 100,
+    "wires": [["parse_electric"]]
+  },
+  {
+    "id": "parse_electric",
+    "type": "function",
+    "z": "tab_electric",
+    "name": "Parse & Validate",
+    "func": "const d = JSON.parse(msg.payload);\nif (!d.device_id || d.active_power_kw === undefined) return null;\nif (d.quality !== 'GOOD') {\n  msg.topic = `mdt/${d.site_id}/alerts/${d.device_id}`;\n  msg.payload = JSON.stringify({ ts: d.ts, device_id: d.device_id, alarm: 'BAD_QUALITY' });\n  return [null, msg];\n}\nmsg.payload = d;\nreturn [msg, null];",
+    "outputs": 2,
+    "x": 320, "y": 100,
+    "wires": [["derive_electric"], ["mqtt_out_alerts"]]
+  },
+  {
+    "id": "derive_electric",
+    "type": "function",
+    "z": "tab_electric",
+    "name": "Derived Electric Metrics",
+    "func": "const d = msg.payload;\n// Apparent power (if missing)\nif (d.active_power_kw && d.power_factor && !d.apparent_power_kva) {\n  d.apparent_power_kva = +(d.active_power_kw / d.power_factor).toFixed(2);\n}\n// CO2 (Morocco ONEE factor 0.718 kgCO2/kWh)\nif (d.energy_kwh !== undefined) {\n  d.co2_kg = +(d.energy_kwh * 0.718).toFixed(4);\n}\n// Voltage unbalance\nif (d.voltage_l1_v && d.voltage_l2_v && d.voltage_l3_v) {\n  const avg = (d.voltage_l1_v + d.voltage_l2_v + d.voltage_l3_v) / 3;\n  const maxDev = Math.max(Math.abs(d.voltage_l1_v - avg), Math.abs(d.voltage_l2_v - avg), Math.abs(d.voltage_l3_v - avg));\n  d.voltage_unbalance_pct = +((maxDev / avg) * 100).toFixed(2);\n  if (d.voltage_unbalance_pct > 2.0) node.warn(`Voltage unbalance ${d.voltage_unbalance_pct}% on ${d.device_id}`);\n}\nmsg.payload = d;\nreturn msg;",
+    "x": 560, "y": 100,
+    "wires": [["build_inserts_electric"]]
+  },
+  {
+    "id": "build_inserts_electric",
+    "type": "function",
+    "z": "tab_electric",
+    "name": "Build Multi-Metric Inserts",
+    "func": "const d = msg.payload;\nconst metrics = [\n  ['active_power_kw',       d.active_power_kw],\n  ['reactive_power_kvar',   d.reactive_power_kvar],\n  ['apparent_power_kva',    d.apparent_power_kva],\n  ['power_factor',          d.power_factor],\n  ['voltage_l1_v',          d.voltage_l1_v],\n  ['voltage_l2_v',          d.voltage_l2_v],\n  ['voltage_l3_v',          d.voltage_l3_v],\n  ['current_l1_a',          d.current_l1_a],\n  ['frequency_hz',          d.frequency_hz],\n  ['thd_voltage_pct',       d.thd_voltage_pct],\n  ['thd_current_pct',       d.thd_current_pct],\n  ['energy_kwh',            d.energy_kwh],\n  ['energy_kvarh',          d.energy_kvarh],\n  ['co2_kg',                d.co2_kg],\n  ['voltage_unbalance_pct', d.voltage_unbalance_pct],\n  ['demand_kw_15min',       d.demand_kw_15min],\n];\nconst ts = new Date(d.ts).toISOString();\nconst messages = metrics\n  .filter(([_, v]) => v !== undefined && v !== null)\n  .map(([metric, value]) => ({\n    payload: {\n      query: 'INSERT INTO raw_measurements(time,device_id,device_type,site_id,metric,value,quality) VALUES($1,$2,$3,$4,$5,$6,$7)',\n      params: [ts, d.device_id, 'meter', d.site_id, metric, value, d.quality]\n    }\n  }));\nreturn [messages];",
+    "x": 800, "y": 100,
+    "wires": [["tsdb_write_electric"]]
+  },
+  {
+    "id": "tsdb_write_electric",
+    "type": "postgresql",
+    "z": "tab_electric",
+    "name": "Write TimescaleDB",
+    "postgreConfig": "tsdb_config",
+    "x": 1020, "y": 100,
+    "wires": [[]]
+  },
+  {
+    "id": "mqtt_out_alerts",
+    "type": "mqtt out",
+    "z": "tab_electric",
+    "name": "MQTT Alerts",
+    "broker": "emqx_broker",
+    "qos": "1",
+    "x": 560, "y": 200,
+    "wires": []
+  },
+  {
+    "id": "emqx_broker",
+    "type": "mqtt-broker",
+    "name": "EMQX",
+    "broker": "emqx",
+    "port": "1883",
+    "clientid": "nodered_ems",
+    "keepalive": "60",
+    "usetls": false,
+    "protocolVersion": "4"
+  },
+  {
+    "id": "tsdb_config",
+    "type": "postgreConfig",
+    "name": "TimescaleDB",
+    "host": "timescaledb",
+    "port": "5432",
+    "database": "ems",
+    "ssl": false,
+    "user": "ems_user",
+    "password": "ems_secret",
+    "max": "10"
+  }
+]
