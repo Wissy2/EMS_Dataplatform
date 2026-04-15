@@ -9,7 +9,7 @@ services:
       - iot-net
     depends_on:
       - modbus-sim
-      - emqx
+      - mqtt-broker
 
   modbus-sim:
     build: ./simulator
@@ -19,10 +19,12 @@ services:
     networks:
       - iot-net
 
-  emqx:
-    image: emqx/emqx
+  mqtt-broker:
+    image: eclipse-mosquitto:2
     ports:
-      - "18083:18083"
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
     networks:
       - iot-net
 
