@@ -18,5 +18,5 @@ docker compose up --build
 | MQTT        | localhost:1883           |
 
 ## Verify data is flowing
-docker run --rm eclipse-mosquitto \
-  mosquitto_sub -h host.docker.internal -t "ems/#" -v
+# Subscribe to all topics and watch live messages
+docker exec ems-dataplatform-mqtt-broker-1 mosquitto_sub -h localhost -t "#" -v
