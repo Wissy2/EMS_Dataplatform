@@ -5,7 +5,7 @@
 - Git
 
 ## Setup
-git clone https://github.com/your-org/ems-project
+git clone https://github.com/Wissy2/EMS_Dataplatform.git
 cd ems-project
 docker compose up --build
 
