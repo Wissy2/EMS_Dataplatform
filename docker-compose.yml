@@ -1,6 +1,10 @@
 services:
   nodered:
     image: nodered/node-red
+    environment:
+      - NODE_RED_ENABLE_PROJECTS=false
+      - NODE_OPTIONS=--experimental-vm-modules
+      - NODERED_FUNCTION_EXTERNAL_MODULES=true
     ports:
       - "1880:1880"
     volumes:
@@ -67,7 +71,39 @@ services:
       - kafka_data:/var/lib/kafka/data
     networks:
       - iot-net
+    healthcheck:
+      test: ["CMD", "bash", "-c", "nc -z localhost 9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+  
+  flink-jobmanager:
+    image: flink-pyflink:1.18
+    container_name: flink-jobmanager
+    command: jobmanager
+    ports:
+      - "8081:8081"        # Flink Web UI
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: flink-jobmanager
+    volumes:
+      - ./flink-jobs:/opt/flink/jobs
+    networks:
+      - iot-net
 
+  flink-taskmanager:
+    image: flink-pyflink:1.18
+    container_name: flink-taskmanager
+    command: taskmanager
+    depends_on:
+      - flink-jobmanager
+    environment:
+      - |
+        FLINK_PROPERTIES= jobmanager.rpc.address: flink-jobmanager
+        taskmanager.numberOfTaskSlots: 4
+    networks:
+      - iot-net
 networks:
   iot-net:
     driver: bridge

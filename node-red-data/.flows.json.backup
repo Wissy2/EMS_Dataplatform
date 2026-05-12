@@ -81,7 +81,7 @@
         "unitid": "1",
         "dataType": "InputRegister",
         "adr": "0",
-        "quantity": "5",
+        "quantity": "7",
         "rate": "5",
         "rateUnit": "s",
         "delayOnStart": false,
@@ -108,7 +108,7 @@
         "type": "function",
         "z": "e446fb4ecf531d48",
         "name": "function 1",
-        "func": "const unitId = msg.payload.unitid || msg.unitid || 1;\nconst raw = msg.payload.data || msg.payload;\n\nmsg.topic = `ems/meter/${unitId}`;\nmsg.payload = JSON.stringify({\n    meter_id:  unitId,\n    kw:        raw[0] / 10,\n    kvar:      raw[1] / 10,\n    voltage:   raw[2] / 10,\n    current:   raw[3] / 10,\n    kwh:       raw[4] / 10,\n    timestamp: new Date().toISOString()\n});\n\nreturn msg;",
+        "func": "const unitId = msg.payload.unitid || msg.unitid || 1;\nconst raw = msg.payload.data || msg.payload;\n\nmsg.topic = `ems/meter/${unitId}`;\nmsg.payload = {\n    device_id:    `PM-00${unitId}`,\n    device_name:  `Power Meter ${unitId}`,\n    timestamp:    new Date().toISOString(),\n    measurements: {\n        frequency_Hz:      raw[0] / 100,\n        voltage_V:         raw[1] / 10,\n        current_A:         raw[2] / 10,\n        power_factor:      raw[3] / 100,\n        thd_voltage_pct:   raw[4] / 10,\n        thd_current_pct:   raw[5] / 10,\n        active_energy_kWh: raw[6]\n    }\n};\nreturn msg;",
         "outputs": 1,
         "timeout": 0,
         "noerr": 0,
@@ -119,7 +119,7 @@
         "y": 200,
         "wires": [
             [
-                "6d32e3e5443e3487"
+                "ad3a94292d0b38ae"
             ]
         ]
     },
@@ -130,15 +130,15 @@
         "name": "",
         "topic": "ems/meters/1",
         "qos": "1",
-        "retain": "",
+        "retain": "true",
         "respTopic": "",
         "contentType": "",
         "userProps": "",
         "correl": "",
         "expiry": "",
         "broker": "17a6c5a9c18f3664",
-        "x": 680,
-        "y": 280,
+        "x": 740,
+        "y": 480,
         "wires": []
     },
     {
@@ -157,5 +157,30 @@
         "x": 370,
         "y": 80,
         "wires": []
+    },
+    {
+        "id": "ad3a94292d0b38ae",
+        "type": "function",
+        "z": "e446fb4ecf531d48",
+        "name": "Normalize + Serialize",
+        "func": "const avroLib = global.get('avsc');  // ← renamed to avroLib\n\nif (!avroLib) {\n    node.error(\"avsc not loaded\");\n    return null;\n}\n\n// Hardcode schema ID — most reliable approach\n// Run: curl http://localhost:8081/subjects/ems-telemetry-value/versions/latest\n// and replace 1 with your actual ID\nconst schemaId = 1;\n\nconst schema = avroLib.Type.forSchema({\n    type: 'record',\n    name: 'EmsTelemetry',\n    namespace: 'com.ems.avro',\n    fields: [\n        { name: 'device_id', type: 'string' },\n        { name: 'device_name', type: 'string' },\n        { name: 'timestamp', type: 'string' },\n        { name: 'frequency_Hz', type: 'double' },\n        { name: 'voltage_V', type: 'double' },\n        { name: 'current_A', type: 'double' },\n        { name: 'power_factor', type: 'double' },\n        { name: 'thd_voltage_pct', type: 'double' },\n        { name: 'thd_current_pct', type: 'double' },\n        { name: 'active_energy_kWh', type: 'double' }\n    ]\n});\n\nconst raw = msg.payload;\n\nconst record = {\n    device_id: raw.device_id,\n    device_name: raw.device_name,\n    timestamp: raw.timestamp,\n    frequency_Hz: raw.measurements.frequency_Hz || 0,\n    voltage_V: raw.measurements.voltage_V || 0,\n    current_A: raw.measurements.current_A || 0,\n    power_factor: raw.measurements.power_factor || 0,\n    thd_voltage_pct: raw.measurements.thd_voltage_pct || 0,\n    thd_current_pct: raw.measurements.thd_current_pct || 0,\n    active_energy_kWh: raw.measurements.active_energy_kWh || 0\n};\n\nif (record.voltage_V === 0) {\n    node.warn(\"Zero voltage from \" + record.device_id + \" — dropping\");\n    return null;\n}\n\ntry {\n    const avroBytes = schema.toBuffer(record);\n    const wire = Buffer.alloc(5 + avroBytes.length);\n    wire.writeUInt8(0x00, 0);\n    wire.writeUInt32BE(schemaId, 1);\n    avroBytes.copy(wire, 5);\n    msg.payload = wire;\n    return msg;\n} catch (err) {\n    node.error(\"Avro serialization failed: \" + err.message, msg);\n    return null;\n}",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [
+            {
+                "var": "avsc",
+                "module": "avsc"
+            }
+        ],
+        "x": 510,
+        "y": 360,
+        "wires": [
+            [
+                "6d32e3e5443e3487"
+            ]
+        ]
     }
 ]

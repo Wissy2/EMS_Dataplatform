@@ -535,12 +535,14 @@ module.exports = {
     /** The following property can be used to set predefined values in Global Context.
      * This allows extra node modules to be made available with in Function node.
      * For example, the following:
-     *    functionGlobalContext: { os:require('os') }
+     *    functionGlobalContext: {
+        avsc: require("avsc"), os:require('os') }
      * will allow the `os` module to be accessed in a Function node using:
      *    global.get("os")
      */
     functionGlobalContext: {
-        // os:require('os'),
+        // os:require("os"),
+        avsc:require("avsc"),
     },
 
     /** The maximum number of messages nodes will buffer internally as part of their

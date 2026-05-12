@@ -81,7 +81,7 @@
         "unitid": "1",
         "dataType": "InputRegister",
         "adr": "0",
-        "quantity": "5",
+        "quantity": "7",
         "rate": "5",
         "rateUnit": "s",
         "delayOnStart": false,
@@ -108,7 +108,7 @@
         "type": "function",
         "z": "e446fb4ecf531d48",
         "name": "function 1",
-        "func": "const unitId = msg.payload.unitid || msg.unitid || 1;\nconst raw = msg.payload.data || msg.payload;\n\nmsg.topic = `ems/meter/${unitId}`;\nmsg.payload = JSON.stringify({\n    meter_id:  unitId,\n    kw:        raw[0] / 10,\n    kvar:      raw[1] / 10,\n    voltage:   raw[2] / 10,\n    current:   raw[3] / 10,\n    kwh:       raw[4] / 10,\n    timestamp: new Date().toISOString()\n});\n\nreturn msg;",
+        "func": "const unitId = msg.payload.unitid || msg.unitid || 1;\nconst raw = msg.payload.data || msg.payload;\n\nmsg.topic = `ems/meter/${unitId}`;\nmsg.payload = {\n    device_id:    `PM-00${unitId}`,\n    device_name:  `Power Meter ${unitId}`,\n    timestamp:    new Date().toISOString(),\n    measurements: {\n        frequency_Hz:      raw[0] / 100,\n        voltage_V:         raw[1] / 10,\n        current_A:         raw[2] / 10,\n        power_factor:      raw[3] / 100,\n        thd_voltage_pct:   raw[4] / 10,\n        thd_current_pct:   raw[5] / 10,\n        active_energy_kWh: raw[6]\n    }\n};\nreturn msg;",
         "outputs": 1,
         "timeout": 0,
         "noerr": 0,
@@ -137,8 +137,8 @@
         "correl": "",
         "expiry": "",
         "broker": "17a6c5a9c18f3664",
-        "x": 440,
-        "y": 380,
+        "x": 600,
+        "y": 260,
         "wires": []
     },
     {

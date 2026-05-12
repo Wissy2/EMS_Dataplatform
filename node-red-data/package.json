@@ -4,6 +4,7 @@
     "version": "0.0.1",
     "private": true,
     "dependencies": {
+        "avsc": "^5.7.9",
         "node-red-contrib-modbus": "~5.45.2"
     }
 }
