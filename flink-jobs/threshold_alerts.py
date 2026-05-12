@@ -14,7 +14,7 @@ from pyflink.common.serialization import SimpleStringSchema
 
 
 # ── Constants ────────────────────────────────────────────────────────────────
-KAFKA_BROKER        = os.getenv("KAFKA_BROKER", "kafka:9092")
+KAFKA_BROKER        = os.getenv("KAFKA_BROKER", "kafka:29092")
 INPUT_TOPIC         = "ems.meters.1"      # Actual topic 
 OUTPUT_TOPIC        = "ems.alerts"
 
@@ -207,6 +207,7 @@ def main():
         # Key by device_id so each PM gets its own independent fault state
         # After — skips empty/whitespace strings before parsing
         .filter(lambda raw: raw is not None and raw.strip() != "")
+        .map(lambda x: (print(f"[FLINK DEBUG] {x}"), x)[1]) 
         .key_by(lambda raw: json.loads(raw).get("device_id", "unknown"))
         .process(ThresholdAlertFunction())
     )
