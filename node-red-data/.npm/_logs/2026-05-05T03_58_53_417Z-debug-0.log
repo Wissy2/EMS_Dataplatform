@@ -1,0 +1,63 @@
+0 verbose cli /usr/local/bin/node /usr/local/bin/npm
+1 info using npm@10.8.2
+2 info using node@v20.20.1
+3 silly config load:file:/usr/local/lib/node_modules/npm/npmrc
+4 silly config load:file:/data/.npmrc
+5 silly config load:file:/usr/src/node-red/.npmrc
+6 silly config load:file:/usr/local/etc/npmrc
+7 verbose title npm install avsc
+8 verbose argv "install" "avsc"
+9 verbose logfile logs-max:10 dir:/data/.npm/_logs/2026-05-05T03_58_53_417Z-
+10 verbose logfile /data/.npm/_logs/2026-05-05T03_58_53_417Z-debug-0.log
+11 silly packumentCache heap:2197815296 maxSize:549453824 maxEntrySize:274726912
+12 silly logfile done cleaning log files
+13 silly idealTree buildDeps
+14 silly fetch manifest avsc@^5.7.9
+15 silly packumentCache full:https://registry.npmjs.org/avsc cache-miss
+16 http fetch GET 200 https://registry.npmjs.org/avsc 1563ms (cache revalidated)
+17 silly packumentCache full:https://registry.npmjs.org/avsc set size:341668 disposed:false
+18 silly placeDep ROOT avsc@5.7.9 REPLACE for: node-red-project@0.0.1 want: ^5.7.9
+19 silly reify moves {}
+20 silly audit bulk request {
+20 silly audit   '@openp4nr/modbus-serial': [ '8.4.0' ],
+20 silly audit   '@serialport/bindings-cpp': [ '10.8.0', '12.0.1' ],
+20 silly audit   '@serialport/parser-byte-length': [ '10.5.0', '12.0.0' ],
+20 silly audit   '@serialport/parser-cctalk': [ '10.5.0', '12.0.0' ],
+20 silly audit   '@serialport/parser-delimiter': [ '10.5.0', '11.0.0', '12.0.0' ],
+20 silly audit   '@serialport/parser-inter-byte-timeout': [ '10.5.0', '12.0.0' ],
+20 silly audit   '@serialport/parser-packet-length': [ '10.5.0', '12.0.0' ],
+20 silly audit   '@serialport/parser-readline': [ '10.5.0', '11.0.0', '12.0.0' ],
+20 silly audit   '@serialport/parser-ready': [ '10.5.0', '12.0.0' ],
+20 silly audit   '@serialport/parser-regex': [ '10.5.0', '12.0.0' ],
+20 silly audit   '@serialport/parser-slip-encoder': [ '10.5.0', '12.0.0' ],
+20 silly audit   '@serialport/parser-spacepacket': [ '10.5.0', '12.0.0' ],
+20 silly audit   '@serialport/stream': [ '10.5.0', '12.0.0' ],
+20 silly audit   'node-addon-api': [ '5.1.0', '7.0.0' ],
+20 silly audit   serialport: [ '10.5.0', '12.0.0' ],
+20 silly audit   '@serialport/binding-mock': [ '10.2.2' ],
+20 silly audit   debug: [ '4.3.4', '4.3.7', '3.2.7' ],
+20 silly audit   ms: [ '2.1.2', '2.1.3' ],
+20 silly audit   '@serialport/bindings-interface': [ '1.2.2' ],
+20 silly audit   '@serialport/list': [ '12.0.0' ],
+20 silly audit   '@xstate/fsm': [ '2.1.0' ],
+20 silly audit   bson: [ '6.9.1' ],
+20 silly audit   'buffer-from': [ '1.1.2' ],
+20 silly audit   commander: [ '11.0.0' ],
+20 silly audit   crc: [ '3.4.0' ],
+20 silly audit   jsmodbus: [ '4.0.10' ],
+20 silly audit   'line-by-line': [ '0.1.6' ],
+20 silly audit   'node-gyp-build': [ '4.6.0' ],
+20 silly audit   'node-red-contrib-modbus': [ '5.45.2' ],
+20 silly audit   'source-map': [ '0.6.1' ],
+20 silly audit   'source-map-support': [ '0.5.21' ],
+20 silly audit   underscore: [ '1.13.8' ],
+20 silly audit   avsc: [ '5.7.9' ]
+20 silly audit }
+21 http fetch POST 200 https://registry.npmjs.org/-/npm/v1/security/advisories/bulk 324ms
+22 silly audit report {}
+23 verbose cwd /data
+24 verbose os Linux 6.17.0-22-generic
+25 verbose node v20.20.1
+26 verbose npm  v10.8.2
+27 verbose exit 0
+28 info ok

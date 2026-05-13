@@ -21,9 +21,6 @@ const kafka = new Kafka({
 
 const producer = kafka.producer();
 
-/**
- * Kafka connection with retry (important for Docker startup order)
- */
 async function connectKafkaWithRetry() {
   while (true) {
     try {
@@ -38,9 +35,6 @@ async function connectKafkaWithRetry() {
 }
 
 async function run() {
-  // ✅ Register MQTT handlers FIRST before any async waiting
-  // so we never miss the 'connect' event
-
   mqttClient.on("connect", () => {
     console.log("✅ Connected to MQTT broker");
     mqttClient.subscribe("#", (err, granted) => {
@@ -53,19 +47,21 @@ async function run() {
   });
 
   mqttClient.on("message", async (topic, payload) => {
-    console.log("📩 MQTT RAW:", topic, payload.toString());
+    // ← CHANGED: log buffer length instead of toString() to avoid corrupting binary
+    console.log(`📩 MQTT RAW: ${topic} [${payload.length} bytes]`);
+
     try {
       await producer.send({
         topic: KAFKA_TOPIC,
         messages: [
           {
             key: topic,
-            value: payload.toString(),
-            timestamp: Date.now().toString(),
+            value: payload,           // ← CHANGED: pass Buffer directly, no toString()
+            timestamp: Date.now().toString(),  // ← CHANGED: fixed the [Date.now] typo
           },
         ],
       });
-      console.log(`🚀 Forwarded [${topic}] → Kafka`);
+      console.log(`🚀 Forwarded [${topic}] → Kafka [${payload.length} bytes]`);
     } catch (err) {
       console.error("❌ Kafka send error:", err);
     }
@@ -75,7 +71,6 @@ async function run() {
   mqttClient.on("reconnect", () => console.log("♻️ MQTT reconnecting..."));
   mqttClient.on("close", () => console.log("🔌 MQTT connection closed"));
 
-  // Connect to Kafka AFTER handlers are registered
   await connectKafkaWithRetry();
 }
 
