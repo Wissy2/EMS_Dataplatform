@@ -36,13 +36,13 @@ docker exec flink-jobmanager flink list
 ## Check kafka consumer on topic ems.meters.1
 docker exec -it kafka \
   kafka-console-consumer \
-  --bootstrap-server localhost:9092 \
+  --bootstrap-server localhost:29092 \
   --topic ems.meters.1 \
   --from-beginning
   
 ## make sure ems.alerts topic exist 
 docker exec -it kafka \
-  kafka-topics --list --bootstrap-server localhost:9092
+  kafka-topics --list --bootstrap-server localhost:29092
 
 
 ## To trigger a test alert, publish a fake out-of-range message to ems.meters.1
@@ -59,6 +59,6 @@ docker exec -it kafka \
 ## Open new terminal for alerts
 docker exec -it kafka \
   kafka-console-consumer \
-  --bootstrap-server localhost:9092 \
+  --bootstrap-server localhost:29092 \
   --topic ems.alerts \
   --from-beginning

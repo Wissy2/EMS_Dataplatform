@@ -14,14 +14,14 @@ from pyflink.common.serialization import SimpleStringSchema
 
 
 # ── Constants ────────────────────────────────────────────────────────────────
-KAFKA_BROKER        = os.getenv("KAFKA_BROKER", "kafka:29092")
-INPUT_TOPIC         = "ems.meters.1"      # Actual topic 
+KAFKA_BROKER        = os.getenv("KAFKA_BROKER", "kafka:9092")
+INPUT_TOPIC         = "ems.meters.1"
 OUTPUT_TOPIC        = "ems.alerts"
 
 VOLTAGE_NOMINAL     = 230.0               # V
-FREQUENCY_NOMINAL   = 50.0               # Hz
-DEVIATION_PCT       = 0.05               # ±5%
-SUSTAINED_MS        = 3000               # 3 000 ms = 3 seconds
+FREQUENCY_NOMINAL   = 50.0                # Hz
+DEVIATION_PCT       = 0.05                # ±5%
+SUSTAINED_MS        = 3000                # 3 000 ms = 3 seconds
 
 # Derived limits — computed once at module level
 V_LOW   = VOLTAGE_NOMINAL   * (1 - DEVIATION_PCT)   # 218.5 V
@@ -73,12 +73,9 @@ class ThresholdAlertFunction(KeyedProcessFunction):
     """
 
     def open(self, runtime_context):
-        # Timestamp (epoch ms) when voltage FIRST went out of range.
-        # None means it is currently within nominal range.
         self.voltage_fault_start = runtime_context.get_state(
             ValueStateDescriptor("voltage_fault_start", Types.LONG())
         )
-        # Same for frequency
         self.freq_fault_start = runtime_context.get_state(
             ValueStateDescriptor("freq_fault_start", Types.LONG())
         )
@@ -89,16 +86,13 @@ class ThresholdAlertFunction(KeyedProcessFunction):
             device_id    = msg.get("device_id",   "unknown")
             device_name  = msg.get("device_name", device_id)
 
-            # ── Pull the nested measurements block ────────────────────────
             m = msg.get("measurements", {})
             if not m:
-                # Message arrived without measurements — skip silently
                 return
 
             voltage   = m.get("voltage_V")
             frequency = m.get("frequency_Hz")
 
-            # Wall-clock fallback when event-time watermarks are not configured
             now_ms = ctx.timestamp() or int(datetime.utcnow().timestamp() * 1000)
 
             # ── 1. Voltage check ──────────────────────────────────────────
@@ -107,7 +101,6 @@ class ThresholdAlertFunction(KeyedProcessFunction):
 
                 if v_out:
                     if self.voltage_fault_start.value() is None:
-                        # First sample outside range — start the fault clock
                         self.voltage_fault_start.update(now_ms)
                     else:
                         duration_ms = now_ms - self.voltage_fault_start.value()
@@ -127,10 +120,8 @@ class ThresholdAlertFunction(KeyedProcessFunction):
                                     f"for {duration_ms} ms."
                                 )
                             )
-                            # Clear so we don't flood — next alarm only after recovery + new fault
                             self.voltage_fault_start.clear()
                 else:
-                    # Recovered — reset fault clock
                     self.voltage_fault_start.clear()
 
             # ── 2. Frequency check ────────────────────────────────────────
@@ -171,9 +162,9 @@ class ThresholdAlertFunction(KeyedProcessFunction):
 def main():
     env = StreamExecutionEnvironment.get_execution_environment()
     env.set_runtime_mode(RuntimeExecutionMode.STREAMING)
-    env.set_parallelism(1)   # 1 is fine on dev VM; match to Kafka partition count in prod
+    env.set_parallelism(1)
 
-    # ── Source: ems.sensors ───────────────────────────────────────────────────
+    # ── Source ────────────────────────────────────────────────────────────────
     source = (
         KafkaSource.builder()
         .set_bootstrap_servers(KAFKA_BROKER)
@@ -184,7 +175,7 @@ def main():
         .build()
     )
 
-    # ── Sink: ems.alerts ──────────────────────────────────────────────────────
+    # ── Sink ──────────────────────────────────────────────────────────────────
     sink = (
         KafkaSink.builder()
         .set_bootstrap_servers(KAFKA_BROKER)
@@ -198,22 +189,21 @@ def main():
     )
 
     # ── Pipeline ──────────────────────────────────────────────────────────────
-    stream = (
-        env.from_source(source, WatermarkStrategy.no_watermarks(), "Kafka: ems.sensors")
-    )
+    stream = env.from_source(source, WatermarkStrategy.no_watermarks(), "Kafka: ems.sensors")
 
     alerts = (
         stream
-        # Key by device_id so each PM gets its own independent fault state
-        # After — skips empty/whitespace strings before parsing
         .filter(lambda raw: raw is not None and raw.strip() != "")
-        .map(lambda x: (print(f"[FLINK DEBUG] {x}"), x)[1]) 
+        .map(lambda x: (print(f"[FLINK DEBUG] {x}"), x)[1])
         .key_by(lambda raw: json.loads(raw).get("device_id", "unknown"))
         .process(ThresholdAlertFunction())
+        # ── FIXED ─────────────────────────────────────────────────────────────
+        # Removed .encode("utf-8") and enforced Types.STRING() to satisfy SimpleStringSchema
+        .map(lambda s: str(s), output_type=Types.STRING())
     )
 
     alerts.sink_to(sink)
-    env.execute("EMS Threshold Alert Monitor — v1")
+    env.execute("EMS Threshold Alert Monitor — v2")
 
 
 if __name__ == "__main__":
