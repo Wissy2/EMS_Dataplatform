@@ -40,7 +40,7 @@ services:
       - kafka
     environment:
       MQTT_BROKER: "mqtt://mqtt-broker:1883"
-      KAFKA_BROKER: "kafka:29092"
+      KAFKA_BROKER: "kafka:9092"
     restart: unless-stopped
     networks:
       - iot-net
@@ -59,8 +59,8 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_PROCESS_ROLES: "broker,controller"
-      KAFKA_LISTENERS: "PLAINTEXT://0.0.0.0:9092,INTERNAL://0.0.0.0:29092,CONTROLLER://0.0.0.0:9093"
-      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://localhost:9092,INTERNAL://kafka:29092"
+      KAFKA_LISTENERS: "PLAINTEXT://0.0.0.0:29092,INTERNAL://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://localhost:29092,INTERNAL://kafka:9092"
       KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "PLAINTEXT:PLAINTEXT,INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT"
       KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
@@ -72,7 +72,7 @@ services:
     networks:
       - iot-net
     healthcheck:
-      test: ["CMD", "bash", "-c", "nc -z localhost 9092"]
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/9092"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -84,6 +84,7 @@ services:
     ports:
       - "8081:8081"        # Flink Web UI
     environment:
+      - KAFKA_BROKER=kafka:9092
       - |
         FLINK_PROPERTIES=
         jobmanager.rpc.address: flink-jobmanager
@@ -99,6 +100,7 @@ services:
     depends_on:
       - flink-jobmanager
     environment:
+      - KAFKA_BROKER=kafka:9092
       - |
         FLINK_PROPERTIES= jobmanager.rpc.address: flink-jobmanager
         taskmanager.numberOfTaskSlots: 4
