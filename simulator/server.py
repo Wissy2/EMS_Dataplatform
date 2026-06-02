@@ -6,23 +6,6 @@ from pymodbus.datastore import (
 
 NUM_METERS = 8
 
-def clamp(val):
-    return max(0, min(65535, int(val)))
-
-def build_context():
-    slaves = {}
-    for i in range(1, NUM_METERS + 1):
-        block = ModbusSequentialDataBlock(0, [0] * 50)
-        slaves[i] = ModbusSlaveContext(ir=block)
-    return ModbusServerContext(slaves=slaves, single=False)
-import time, math, random
-from pymodbus.server import StartTcpServer
-from pymodbus.datastore import (
-    ModbusSlaveContext, ModbusServerContext, ModbusSequentialDataBlock
-)
-
-NUM_METERS = 8
-
 def clamp(val, lo=0, hi=65535):
     return max(lo, min(hi, int(val)))
 

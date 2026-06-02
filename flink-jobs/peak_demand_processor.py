@@ -7,7 +7,7 @@ from pyflink.datastream.window import SlidingEventTimeWindows
 from pyflink.datastream.functions import ProcessWindowFunction
 
 # ── Constants ────────────────────────────────────────────────
-KAFKA_BROKER = os.getenv("KAFKA_BROKER", "kafka:29092")
+KAFKA_BROKER = os.getenv("KAFKA_BROKER", "kafka:9092")
 INPUT_TOPIC  = "ems.meters.1"
 PEAK_TOPIC   = "ems.energy.peaks"
 

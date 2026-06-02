@@ -106,6 +106,32 @@ services:
         taskmanager.numberOfTaskSlots: 4
     networks:
       - iot-net
+
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: timescaledb
+    
+    restart: unless-stopped
+    
+    ports:
+      - "5432:5432"
+      
+    environment:
+      POSTGRES_DB: ems_db
+      POSTGRES_USER: ems_user
+      POSTGRES_PASSWORD: ems_password
+      
+    volumes:
+      - timescaledb_data:/var/lib/postgresql/data
+      
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ems_user -d ems_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      
+    networks:
+      - iot-net
 networks:
   iot-net:
     driver: bridge
@@ -113,3 +139,4 @@ networks:
 volumes:
   nodered-data:
   kafka_data:
+  timescaledb_data:
