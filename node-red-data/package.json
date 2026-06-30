@@ -5,6 +5,9 @@
     "private": true,
     "dependencies": {
         "avsc": "^5.7.9",
-        "node-red-contrib-modbus": "~5.45.2"
+        "node-red-contrib-modbus": "~5.45.2",
+        "node-red-contrib-opcua": "~0.2.352",
+        "node-red-contrib-ui-led": "~0.4.11",
+        "node-red-dashboard": "~3.6.6"
     }
 }

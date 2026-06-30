@@ -2,3 +2,5 @@ __pycache__/
 *.pyc
 .env
 nodered-flows/lib/
+# Mosquitto runtime data
+mosquitto/data/mosquitto.db
