@@ -1,7 +1,9 @@
 """
 models.py
-Typed dataclasses for every message type flowing through the pipeline.
-Using dataclasses (not Pydantic) to stay dependency-light inside Flink.
+Typed dataclasses matching the ems.* TimescaleDB schema exactly.
+Key difference from v1: line_id / area_id are INTEGER FKs, while
+equipment is now keyed by tag_id (VARCHAR, e.g. '310L2-AG-01').
+The metadata lookup step resolves them.
 """
 
 from dataclasses import dataclass, field
@@ -11,21 +13,21 @@ from enum import Enum
 
 
 class MessageType(str, Enum):
-    ELECTRICAL_PM   = "ELECTRICAL_PM"
-    PROCESS_VAR     = "PROCESS_VAR"
-    STEAM_FUEL      = "STEAM_FUEL"
-    WATER_AGG       = "WATER_AGG"
-    ENERGY_AGG      = "ENERGY_AGG"
-    UNKNOWN         = "UNKNOWN"
+    ELECTRICAL_PM = "ELECTRICAL_PM"
+    PROCESS_VAR   = "PROCESS_VAR"
+    STEAM_FUEL    = "STEAM_FUEL"
+    WATER_AGG     = "WATER_AGG"
+    ENERGY_AGG    = "ENERGY_AGG"
+    UNKNOWN       = "UNKNOWN"
 
 
 class ValidationStatus(str, Enum):
-    VALID       = "VALID"
-    INVALID     = "INVALID"
-    WARNING     = "WARNING"
+    VALID   = "VALID"
+    INVALID = "INVALID"
+    WARNING = "WARNING"
 
 
-# ── Kafka envelope ─────────────────────────────────────────────────────────────
+# ── Kafka envelope (pre-parse) ────────────────────────────────────────────────
 @dataclass
 class KafkaEnvelope:
     topic:      str
@@ -37,64 +39,72 @@ class KafkaEnvelope:
     headers:    Dict[str, str]
 
 
-# ── MQTT path metadata ─────────────────────────────────────────────────────────
+# ── MQTT path segments (from mqtt-topic header) ───────────────────────────────
 @dataclass
 class MqttMeta:
     raw_topic:        str
-    plant:            str
-    line:             str
-    area:             str
-    equipment_name:   Optional[str]
-    measurement_name: Optional[str]
+    plant:            str       # Al_Youssoufia_Plant
+    line:             str       # Line-1
+    area:             str       # Extraction
+    equipment_name:   Optional[str]   # Bucket_Wheel_Excavator
+    measurement_name: Optional[str]   # PM1 | Process_Variables
 
 
-# ── Kafka topic metadata ───────────────────────────────────────────────────────
+# ── Resolved FK IDs (from ems metadata tables) ────────────────────────────────
 @dataclass
-class TopicMeta:
-    kafka_topic:  str
-    line:         str
-    area:         str
-    payload_type: str
+class ResolvedIds:
+    """
+    Looked up once from the ems.* metadata tables at job startup
+    and cached in a dict keyed by device_id.
+    """
+    plant_id:     Optional[int]
+    line_id:      Optional[int]
+    area_id:      Optional[int]
+    tag_id:       Optional[str]   # None for aggregate messages (water/energy/steam)
 
 
-# ── Validation result ─────────────────────────────────────────────────────────
+# ── Validation ────────────────────────────────────────────────────────────────
 @dataclass
 class ValidationResult:
-    status:   ValidationStatus
-    flags:    list[str] = field(default_factory=list)
+    status: ValidationStatus = ValidationStatus.VALID
+    flags:  list = field(default_factory=list)
 
     @property
     def is_valid(self) -> bool:
         return self.status != ValidationStatus.INVALID
 
 
-# ── Typed measurement structs ──────────────────────────────────────────────────
+# ── Typed measurement structs (match DB columns exactly) ─────────────────────
+
 @dataclass
 class ElectricalMeasurements:
-    frequency:              Optional[float]
-    voltage_L1N:            Optional[float]
-    voltage_L2N:            Optional[float]
-    voltage_L3N:            Optional[float]
-    voltage_L1L2:           Optional[float]
-    voltage_L2L3:           Optional[float]
-    voltage_L3L1:           Optional[float]
-    current_L1:             Optional[float]
-    current_L2:             Optional[float]
-    current_L3:             Optional[float]
-    thd_voltage:            Optional[float]
-    thd_current:            Optional[float]
-    power_factor:           Optional[float]
-    active_power_kW:        Optional[float]
-    reactive_power_kVAR:    Optional[float]
-    apparent_power_kVA:     Optional[float]
-    energy_consumption_kWh: Optional[float]
-    breaker_status:         Optional[bool]
-    alarm_trip:             Optional[bool]
+    frequency:              Optional[float] = None
+    voltage_l1n:            Optional[float] = None
+    voltage_l2n:            Optional[float] = None
+    voltage_l3n:            Optional[float] = None
+    voltage_l1l2:           Optional[float] = None
+    voltage_l2l3:           Optional[float] = None
+    voltage_l3l1:           Optional[float] = None
+    current_l1:             Optional[float] = None
+    current_l2:             Optional[float] = None
+    current_l3:             Optional[float] = None
+    thd_voltage:            Optional[float] = None
+    thd_current:            Optional[float] = None
+    power_factor:           Optional[float] = None
+    active_power_kw:        Optional[float] = None
+    reactive_power_kvar:    Optional[float] = None
+    apparent_power_kva:     Optional[float] = None
+    energy_consumption_kwh: Optional[float] = None
+    breaker_status:         Optional[bool]  = None   # DB: BOOLEAN
+    alarm_trip:             Optional[bool]  = None   # DB: BOOLEAN
 
 
 @dataclass
 class ProcessVariables:
-    """Explicitly defined to match ems.process_variables schema"""
+    """
+    Explicit typed columns matching ems.process_variables exactly.
+    All nullable — each device only populates its relevant fields.
+    """
     belt_speed:          Optional[float] = None
     pump_speed:          Optional[float] = None
     agitator_speed:      Optional[float] = None
@@ -105,83 +115,78 @@ class ProcessVariables:
     air_pressure:        Optional[float] = None
     air_flow:            Optional[float] = None
     speed:               Optional[float] = None
-    status:              Optional[bool] = None
+    status:              Optional[bool]  = None   # DB: BOOLEAN
 
 
 @dataclass
 class SteamFuelMeasurements:
-    steam_flow_rate:    Optional[float]
-    steam_totalizer:    Optional[float]
-    steam_pressure:     Optional[float]
-    steam_temperature:  Optional[float]
-    fuel_flow_rate:     Optional[float]
-    fuel_totalizer:     Optional[float]
-    fuel_temperature:   Optional[float]
-    fuel_pressure:      Optional[float]
+    steam_flow_rate:   Optional[float] = None
+    steam_totalizer:   Optional[float] = None
+    steam_pressure:    Optional[float] = None
+    steam_temperature: Optional[float] = None
+    fuel_flow_rate:    Optional[float] = None
+    fuel_totalizer:    Optional[float] = None
+    fuel_pressure:     Optional[float] = None
+    fuel_temperature:  Optional[float] = None
 
 
 @dataclass
 class WaterAggregate:
-    line:            str
-    total_water_m3:  Optional[float]
+    total_water_m3: Optional[float] = None
 
 
 @dataclass
 class EnergyAggregate:
-    area:              Optional[str]
-    line:              Optional[str]
-    total_energy_kWh:  Optional[float]
+    area_id:          Optional[int]   = None   # None = line total
+    total_energy_kwh: Optional[float] = None
 
 
-# ── Normalised record (post-parse, pre-insert) ────────────────────────────────
+# ── Normalised record (fully resolved, ready to insert) ───────────────────────
 @dataclass
 class NormalisedRecord:
-    # Routing / identity
-    message_type:         MessageType
-    kafka_topic:          str
-    partition:            int
-    offset:               int
+    # Routing
+    message_type:    MessageType
+    kafka_topic:     str
+    partition:       int
+    offset:          int
 
     # Timestamps
-    event_time:           datetime
-    processing_time:      datetime
+    event_time:      datetime
+    processing_time: datetime
 
-    # Source identifiers (from MQTT path / JSON)
-    plant:                str
-    line:                 str
-    area:                 str
-    equipment_name:       Optional[str]
-    measurement_name:     Optional[str]
-    device_id:            Optional[str]
-    mqtt_topic:           Optional[str]     # Retained for raw_measurements
-    
-    # Validation (Moved above the defaults to fix the TypeError)
-    validation:           ValidationResult
+    # Raw MQTT metadata
+    mqtt_topic:      str
+    plant:           str
+    line:            str
+    area:            str
+    equipment_name:  Optional[str]
+    device_id:       Optional[str]
 
-    # Resolved Database IDs (Filled by Enricher)
-    plant_id:             Optional[int] = None
-    line_id:              Optional[int] = None
-    area_id:              Optional[int] = None
-    equipment_id:         Optional[int] = None
+    # Resolved integer FKs (from ems metadata tables)
+    ids: ResolvedIds
 
-    # Typed measurements
-    electrical:           Optional["ElectricalMeasurements"] = None
-    process_var:          Optional["ProcessVariables"] = None
-    steam_fuel:           Optional["SteamFuelMeasurements"] = None
-    water_agg:            Optional["WaterAggregate"] = None
-    energy_agg:           Optional["EnergyAggregate"] = None
+    # Validation
+    validation: ValidationResult
 
-    # Original payload
-    raw_payload:          str = ""
+    # Typed measurements (only one is populated per record)
+    electrical:  Optional[ElectricalMeasurements]  = None
+    process_var: Optional[ProcessVariables]         = None
+    steam_fuel:  Optional[SteamFuelMeasurements]    = None
+    water_agg:   Optional[WaterAggregate]           = None
+    energy_agg:  Optional[EnergyAggregate]          = None
+
+    # Original payload — immutable truth
+    raw_payload: str = ""
 
 
-# ── Error record (goes to DLQ) ─────────────────────────────────────────────────
+# ── DLQ error record ──────────────────────────────────────────────────────────
 @dataclass
 class ErrorRecord:
     kafka_topic:   str
     partition:     int
     offset:        int
-    error_type:    str
+    error_type:    str    # JSON_PARSE | SCHEMA | LOOKUP | DB_WRITE
     error_message: str
     raw_payload:   str
     processing_ts: datetime
+    mqtt_topic:    str = ""

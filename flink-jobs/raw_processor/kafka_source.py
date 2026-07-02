@@ -34,6 +34,8 @@ class DeserialiseToEnvelope(MapFunction):
     """
 
     def map(self, value: str):
+        # In production replace this with KafkaRecordDeserialiser
+        # to get full envelope including headers.
         # This stub creates an envelope with empty headers.
         return KafkaEnvelope(
             topic     = "",   # filled by KafkaRecordDeserialiser
@@ -51,7 +53,7 @@ def build_kafka_source(topics: List[str]) -> KafkaSource:
     return (
         KafkaSource.builder()
         .set_bootstrap_servers(config.KAFKA_BROKER)
-       .set_topics(*topics)
+        .set_topics(*topics)
         .set_group_id(config.KAFKA_GROUP_ID)
         .set_starting_offsets(
             KafkaOffsetsInitializer.earliest()
