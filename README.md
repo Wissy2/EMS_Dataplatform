@@ -25,7 +25,16 @@ docker compose up --build
 # Subscribe to all topics and watch live messages
 docker exec ems-dataplatform-mqtt-broker-1 mosquitto_sub -h localhost -t "#" -v
 
+##Raw_ Data Processor 
+## submit the job 
+docker exec flink-jobmanager flink run    --python /opt/flink/jobs/raw_processor/main.py    --pyFiles /opt/flink/jobs/raw_processor/    -d
 
+
+
+
+
+
+##########################################################
 ## submit the flink job 
 docker exec flink-jobmanager \
   flink run --python /opt/flink/jobs/threshold_alerts.py

@@ -98,6 +98,7 @@ services:
     restart: "no"   # ← exits cleanly after topic creation
   #__ FLink __#
   flink-jobmanager:
+    build: ./flink-jobs
     image: flink-pyflink:1.18
     container_name: flink-jobmanager
     command: jobmanager
@@ -109,6 +110,10 @@ services:
     ports:
       - "8081:8081"        # Flink Web UI
     environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/dev/null
+      - GCP_PROJECT=none
+      - NO_GCP_PROBING=true
+      - PYTHONPATH=/usr/local/lib/python3.10/dist-packages
       - KAFKA_BROKER=kafka:9092
       - |
         FLINK_PROPERTIES=
@@ -119,16 +124,18 @@ services:
       - iot-net
 
   flink-taskmanager:
+    build: ./flink-jobs
     image: flink-pyflink:1.18
     container_name: flink-taskmanager
     command: taskmanager
     depends_on:
       - flink-jobmanager
     environment:
+      - PYTHONPATH=/usr/local/lib/python3.10/dist-packages
       - KAFKA_BROKER=kafka:9092
       - |
         FLINK_PROPERTIES= jobmanager.rpc.address: flink-jobmanager
-        taskmanager.numberOfTaskSlots: 4
+        taskmanager.numberOfTaskSlots: 2
     networks:
       - iot-net
 
