@@ -1,11 +1,24 @@
 """
 main.py
-EMS Raw Measurements Processor — Job 1 (v2)
-Updated to use ems.* schema with FK lookups via MetadataCache
-(line_id/area_id/plant_id are INTEGER, equipment is tag_id VARCHAR).
+EMS Raw Measurements Processor — Job 1 (v3)
+
+Fixes applied vs the previous version:
+  1. Real Kafka metadata (topic/partition/offset/headers) now flows through
+     via kafka_source.build_kafka_envelope_stream(), instead of the previous
+     WrapEnvelope stub which always produced topic="", headers={}. That stub
+     silently broke message-type detection for steam/fuel, water, and energy
+     records, and broke plant/line/area extraction for every record.
+  2. The DLQ side output (TAG_ERROR) is now actually sunk to Kafka. Before,
+     ErrorRecords were built and logged once, then discarded.
+  3. The electrical_measurements sink now filters out records with an
+     unresolved tag_id (mirroring the existing process_variables filter),
+     since tag_id is NOT NULL in that table — previously an unresolved
+     device would throw a JDBC constraint violation instead of just being
+     visible (unrouted) in raw_measurements.
+  4. Removed the duplicate/dead second `from database import (...)` block.
 
 Pipeline:
-  Kafka topics (ems.L1.*)
+  Kafka topics (ems.L1.*)  [Table API, real metadata]
       → KafkaEnvelope
       → parse_envelope()        [JSON parse + type detection + FK resolution]
       → validate_record()       [flag anomalies, never drop]
@@ -22,25 +35,32 @@ Pipeline:
 import sys
 import types
 
+# The comment above previously described this guard but never implemented it —
+# sys/types were imported and left unused. Implementing it for real: register a
+# stub "apache_beam" module before pyflink can try to import the real one, so
+# any internal `import apache_beam...` becomes a no-op instead of triggering
+# Beam's gcp.bigquery credential/network probing on import.
+if "apache_beam" not in sys.modules:
+    sys.modules["apache_beam"] = types.ModuleType("apache_beam")
+
 import logging
 
-from pyflink.common import WatermarkStrategy
 from pyflink.common.typeinfo import Types
 from pyflink.datastream import (
     StreamExecutionEnvironment,
     CheckpointingMode,
     ProcessFunction,
 )
-from pyflink.datastream.connectors.kafka import (
-    KafkaSink,
-    KafkaRecordSerializationSchema,
-)
-from pyflink.common.serialization import SimpleStringSchema
+from pyflink.table import StreamTableEnvironment
 
 import config
 import utils
 from metadata import CACHE
-from kafka_source import build_kafka_source
+from kafka_source import (
+    build_kafka_envelope_stream,
+    build_kafka_dlq_sink,
+    error_record_to_json,
+)
 from models import KafkaEnvelope, NormalisedRecord, ErrorRecord, MessageType
 from parser import parse_envelope
 from validators import validate_record
@@ -52,30 +72,18 @@ from routing import (
 from database import (
     raw_measurements_sink, RAW_TYPE,
     electrical_measurements_sink, ELECTRICAL_TYPE,
-    process_variables_sink,
-    steam_fuel_sink,
-    water_consumption_sink,
-    energy_consumption_sink,
+    process_variables_sink, PROCESS_VAR_TYPE,
+    steam_fuel_sink, STEAM_FUEL_TYPE,
+    water_consumption_sink, WATER_TYPE,
+    energy_consumption_sink, ENERGY_TYPE,
+    to_raw_row, to_electrical_row, to_process_var_row,
+    to_steam_fuel_row, to_water_row, to_energy_row,
 )
 
 log = logging.getLogger(__name__)
 
 
-# ── Step 1: wrap raw string to KafkaEnvelope ──────────────────────────────────
-class WrapEnvelope(ProcessFunction):
-    def process_element(self, value, ctx):
-        yield KafkaEnvelope(
-            topic     = "",
-            partition = -1,
-            offset    = -1,
-            kafka_ts  = 0,
-            key       = None,
-            value     = value.encode("utf-8") if isinstance(value, str) else value,
-            headers   = {},
-        )
-
-
-# ── Step 2: parse + FK resolution ────────────────────────────────────────────
+# ── Step 1: parse + FK resolution ────────────────────────────────────────────
 class ParseFunction(ProcessFunction):
     """
     Calls parse_envelope() with the global MetadataCache.
@@ -93,21 +101,12 @@ class ParseFunction(ProcessFunction):
             yield record
 
 
-# ── Step 3: validate (inline map) ────────────────────────────────────────────
+# ── Step 2: validate (inline map) ────────────────────────────────────────────
 class ValidateFunction(ProcessFunction):
     def process_element(self, record: NormalisedRecord, ctx):
         yield validate_record(record)
 
-from database import (
-    raw_measurements_sink, RAW_TYPE,
-    electrical_measurements_sink, ELECTRICAL_TYPE,
-    process_variables_sink, PROCESS_VAR_TYPE,
-    steam_fuel_sink, STEAM_FUEL_TYPE,
-    water_consumption_sink, WATER_TYPE,
-    energy_consumption_sink, ENERGY_TYPE,
-    to_raw_row, to_electrical_row, to_process_var_row,
-    to_steam_fuel_row, to_water_row, to_energy_row,
-)
+
 def main():
     utils.configure_logging()
     log.info("=" * 60)
@@ -127,33 +126,35 @@ def main():
 
     # ── Flink environment ─────────────────────────────────────────────────────
     #
-    # IMPORTANT: JDBC connector classes (JdbcSink, JdbcExecutionOptions, etc.)
-    # are resolved by the CLIENT-SIDE py4j gateway the moment Python code calls
-    # JdbcExecutionOptions.builder() — this happens while building the job graph,
-    # before env.execute() and before TaskManagers ever start. That means the
-    # jars must be on the classpath of the JVM that's already running inside
-    # `flink run`'s Python driver process, which is configured via the
-    # `pipeline.jars` Configuration option set on the environment constructor,
-    # NOT via env.add_jars() called afterward (which only affects the job
-    # graph submitted to TaskManagers, too late for client-side class lookups).
-    from pyflink.common import Configuration
-
-    jar_paths = [
-        "file:///opt/flink/lib/postgresql-42.6.0.jar",
-        "file:///opt/flink/lib/flink-connector-jdbc-3.1.2-1.18.jar",
-        "file:///opt/flink/lib/flink-sql-connector-kafka-3.1.0-1.18.jar",
-    ]
-
-    flink_config = Configuration()
-    flink_config.set_string("pipeline.jars", ";".join(jar_paths))
-    flink_config.set_string("pipeline.classpaths", ";".join(jar_paths))
-
-    env = StreamExecutionEnvironment.get_execution_environment(flink_config)
+    # NOTE: earlier versions of this file explicitly registered these 3 jars
+    # via a Configuration object's pipeline.jars/pipeline.classpaths, plus a
+    # separate env.add_jars() call. That combination caused:
+    #   "IllegalStateException: different set of library BLOBs" on any task
+    #   retry, because the two mechanisms didn't replace each other's value,
+    #   they combined, doubling the effective jar list on the second
+    #   registration.
+    #
+    # Removing add_jars() alone did not fix it — the same doubled list kept
+    # appearing, which means something outside this script (cluster startup
+    # config, the submission command, or flink-conf.yaml) is independently
+    # setting pipeline.jars/pipeline.classpaths to the same 3 jars, and it was
+    # colliding with this script's own registration of the identical jars.
+    #
+    # The actual fix: don't register them here at all. Jars placed in
+    # /opt/flink/lib/ are automatically on the classpath of every Flink JVM
+    # (JobManager, TaskManager, and the `flink run` driver process) — that is
+    # the standard purpose of that directory in the Flink Docker image. No
+    # explicit pipeline.jars/pipeline.classpaths/add_jars() registration is
+    # needed for jars that already live there, for either client-side class
+    # resolution (JdbcSink/JdbcExecutionOptions, resolved when this script
+    # calls their builders) or TaskManager-side execution.
+    #
+    # If postgresql-42.6.0.jar / flink-connector-jdbc-3.1.2-1.18.jar /
+    # flink-sql-connector-kafka-3.1.0-1.18.jar are ever moved out of
+    # /opt/flink/lib/ (e.g. into a job-specific directory), this will need an
+    # explicit registration again — but only ONE mechanism, not two.
+    env = StreamExecutionEnvironment.get_execution_environment()
     env.set_parallelism(config.FLINK_PARALLELISM)
-
-    # Also register via add_jars for TaskManager-side job submission —
-    # belt-and-braces, doesn't hurt to have both.
-    env.add_jars(*jar_paths)
 
     # Exactly-once checkpointing
     env.enable_checkpointing(config.CHECKPOINT_INTERVAL_MS)
@@ -162,51 +163,44 @@ def main():
     env.get_checkpoint_config().set_checkpoint_timeout(60_000)
     env.get_checkpoint_config().set_max_concurrent_checkpoints(1)
 
-    # ── Kafka source ──────────────────────────────────────────────────────────
-    kafka_source = build_kafka_source(config.KAFKA_SOURCE_TOPICS)
-    raw_stream = env.from_source(
-        kafka_source,
-        WatermarkStrategy.no_watermarks(),
-        "Kafka EMS Raw Topics",
-    )
+    # ── Kafka source (Table API, real metadata) ───────────────────────────────
+    # See kafka_source.py for why this must be Table API rather than the
+    # DataStream KafkaSource: only Table API METADATA VIRTUAL columns expose
+    # per-record topic/partition/offset/headers to Python code in PyFlink.
+    t_env = StreamTableEnvironment.create(env)
+    envelope_stream = build_kafka_envelope_stream(env, t_env, config.KAFKA_SOURCE_TOPICS)
 
-    # ── Step 1: Wrap ──────────────────────────────────────────────────────────
-    envelope_stream = (
-        raw_stream
-        .process(WrapEnvelope(), output_type=Types.PICKLED_BYTE_ARRAY())
-        .name("Wrap → KafkaEnvelope")
-    )
-
-    # ── Step 2: Parse + resolve FKs ───────────────────────────────────────────
+    # ── Step 1: Parse + resolve FKs ───────────────────────────────────────────
     parsed_stream = (
         envelope_stream
         .process(ParseFunction(), output_type=Types.PICKLED_BYTE_ARRAY())
         .name("Parse JSON + resolve IDs")
     )
 
-    # ── Step 3: Validate ──────────────────────────────────────────────────────
+    # ── Step 2: Validate ──────────────────────────────────────────────────────
     validated_stream = (
         parsed_stream
         .process(ValidateFunction(), output_type=Types.PICKLED_BYTE_ARRAY())
         .name("Validate")
     )
 
-    # ── Step 4: Route ─────────────────────────────────────────────────────────
+    # ── Step 3: Route ─────────────────────────────────────────────────────────
     routed_stream = (
         validated_stream
         .process(RouterFunction(), output_type=Types.PICKLED_BYTE_ARRAY())
         .name("Route by message type")
     )
-    
-    #Step 5 : Sinks
-    # 5a. ems.raw_measurements
+
+    # ── Step 4: Sinks ─────────────────────────────────────────────────────────
+    # 4a. ems.raw_measurements — every record, valid or not
     routed_stream \
         .map(to_raw_row, output_type=RAW_TYPE) \
         .add_sink(raw_measurements_sink()) \
         .name("→ ems.raw_measurements")
 
-    # 5b. Typed side-output sinks
+    # 4b. Typed side-output sinks
     routed_stream.get_side_output(TAG_ELECTRICAL) \
+        .filter(lambda r: r.ids.tag_id is not None) \
         .map(to_electrical_row, output_type=ELECTRICAL_TYPE) \
         .add_sink(electrical_measurements_sink()) \
         .name("→ ems.electrical_measurements")
@@ -232,6 +226,11 @@ def main():
         .add_sink(energy_consumption_sink()) \
         .name("→ ems.energy_consumption")
 
+    # 4c. DLQ — malformed records that failed parse_envelope()
+    parsed_stream.get_side_output(TAG_ERROR) \
+        .map(error_record_to_json, output_type=Types.STRING()) \
+        .sink_to(build_kafka_dlq_sink()) \
+        .name("→ ems.dlq")
 
     # ── Execute ───────────────────────────────────────────────────────────────
     log.info("Submitting job to Flink cluster...")

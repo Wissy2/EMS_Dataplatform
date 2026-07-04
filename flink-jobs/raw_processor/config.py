@@ -42,7 +42,7 @@ TIMESCALE_JDBC_URL  = (
 )
 
 # ── Flink job ─────────────────────────────────────────────────────────────────
-FLINK_PARALLELISM       = int(os.environ.get("FLINK_PARALLELISM", "4"))
+FLINK_PARALLELISM       = int(os.environ.get("FLINK_PARALLELISM", "2"))
 CHECKPOINT_INTERVAL_MS  = int(os.environ.get("CHECKPOINT_INTERVAL_MS", "30000"))
 CHECKPOINT_DIR          = os.environ.get("CHECKPOINT_DIR", "file:///tmp/flink-checkpoints")
 
