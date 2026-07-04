@@ -27,23 +27,23 @@ def validate_electrical(record: NormalisedRecord) -> None:
         return
 
     # Required presence
-    if e.active_power_kW is None:
+    if e.active_power_kw is None:
         _flag(record.validation, "missing_active_power")
 
-    if e.energy_consumption_kWh is None:
+    if e.energy_consumption_kwh is None:
         _flag(record.validation, "missing_energy_kwh")
 
     # Physical range checks — flag as INVALID but still store
-    if e.active_power_kW is not None and e.active_power_kW < 0:
+    if e.active_power_kw is not None and e.active_power_kw < 0:
         _flag(record.validation, "negative_active_power")
 
-    if e.reactive_power_kVAR is not None and e.reactive_power_kVAR < 0:
+    if e.reactive_power_kvar is not None and e.reactive_power_kvar < 0:
         _flag(record.validation, "negative_reactive_power", make_invalid=False)  # warning only
 
-    if e.apparent_power_kVA is not None and e.apparent_power_kVA < 0:
+    if e.apparent_power_kva is not None and e.apparent_power_kva < 0:
         _flag(record.validation, "negative_apparent_power")
 
-    if e.energy_consumption_kWh is not None and e.energy_consumption_kWh < 0:
+    if e.energy_consumption_kwh is not None and e.energy_consumption_kwh < 0:
         _flag(record.validation, "negative_energy_kwh")
 
     # Frequency range
@@ -66,7 +66,7 @@ def validate_electrical(record: NormalisedRecord) -> None:
 
     # Voltage sanity (> 1000V L-N is unusual for industrial 3-phase at this scale)
     for vfield, label in [
-        (e.voltage_L1N, "V_L1N"), (e.voltage_L2N, "V_L2N"), (e.voltage_L3N, "V_L3N"),
+        (e.voltage_l1n, "V_L1N"), (e.voltage_l2n, "V_L2N"), (e.voltage_l3n, "V_L3N"),
     ]:
         if vfield is not None and vfield > 1000:
             _flag(record.validation, f"{label}_above_1000V", make_invalid=False)
@@ -118,10 +118,10 @@ def validate_energy_agg(record: NormalisedRecord) -> None:
         _flag(record.validation, "missing_energy_aggregate")
         return
 
-    if e.total_energy_kWh is None:
+    if e.total_energy_kwh is None:
         _flag(record.validation, "missing_total_energy_kwh")
 
-    if e.total_energy_kWh is not None and e.total_energy_kWh < 0:
+    if e.total_energy_kwh is not None and e.total_energy_kwh < 0:
         _flag(record.validation, "negative_energy_consumption")
 
 
