@@ -169,6 +169,29 @@ services:
     networks:
       - iot-net
       
+      
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin
+    restart: unless-stopped
+
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+
+    ports:
+      - "5050:80"
+
+    volumes:
+    - pgadmin_data:/var/lib/pgadmin
+
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+
+    networks:
+      - iot-net
+      
 networks:
   iot-net:
     driver: bridge
@@ -177,3 +200,4 @@ volumes:
   nodered-data:
   kafka_data:
   timescaledb_data:
+  pgadmin_data:
