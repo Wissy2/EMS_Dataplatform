@@ -1,13 +1,5 @@
 [
     {
-        "id": "e6b8e567a9f42413",
-        "type": "tab",
-        "label": "Flux 1",
-        "disabled": false,
-        "info": "",
-        "env": []
-    },
-    {
         "id": "f837c135980f5a44",
         "type": "tab",
         "label": "EXTRACTION",
@@ -13080,6 +13072,17 @@
         "order": 8,
         "width": 2,
         "height": 1
+    },
+    {
+        "id": "bfc24554235f4f27",
+        "type": "global-config",
+        "env": [],
+        "modules": {
+            "node-red-contrib-modbus": "5.45.2",
+            "node-red-contrib-opcua": "0.2.352",
+            "node-red-dashboard": "3.6.6",
+            "node-red-contrib-ui-led": "0.4.11"
+        }
     },
     {
         "id": "75f1ec4116f20a1f",
@@ -26363,16 +26366,5 @@
         "x": 1240,
         "y": 680,
         "wires": []
-    },
-    {
-        "id": "bfc24554235f4f27",
-        "type": "global-config",
-        "env": [],
-        "modules": {
-            "node-red-contrib-modbus": "5.45.2",
-            "node-red-contrib-opcua": "0.2.352",
-            "node-red-dashboard": "3.6.6",
-            "node-red-contrib-ui-led": "0.4.11"
-        }
     }
 ]

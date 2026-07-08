@@ -14,7 +14,7 @@
                 "view-show-welcome-tours": true
             },
             "tours": {
-                "welcome": "4.1.8"
+                "welcome": "5.0.1"
             },
             "dialog": {
                 "export": {
@@ -23,7 +23,7 @@
                 }
             }
         },
-        "menu-menu-item-sidebar": true,
+        "menu-menu-item-sidebar": false,
         "menu-menu-item-palette": true
     }
 }
