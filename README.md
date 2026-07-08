@@ -17,7 +17,7 @@ docker compose up -d
 | Node-RED    | http://localhost:1880    |
 | EMQX broker | http://localhost:18083   |
 | MQTT        | http://localhost:1883           |
-| Flink       |  http://localhost:8081   |
+| Flink       | http://localhost:8081   |
 
 ## Verify data is flowing
 ## Subscribe to all topics and watch live messages

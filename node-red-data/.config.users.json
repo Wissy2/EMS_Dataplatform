@@ -10,11 +10,11 @@
                 "view-node-status": true,
                 "view-node-info-icon": true,
                 "view-node-show-label": true,
-                "view-show-tips": true,
+                "view-show-tips": false,
                 "view-show-welcome-tours": true
             },
             "tours": {
-                "welcome": "4.1.8"
+                "welcome": "5.0.1"
             },
             "dialog": {
                 "export": {

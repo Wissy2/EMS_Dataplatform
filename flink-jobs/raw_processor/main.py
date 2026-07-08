@@ -22,8 +22,8 @@ Pipeline:
       → KafkaEnvelope
       → parse_envelope()        [JSON parse + type detection + FK resolution]
       → validate_record()       [flag anomalies, never drop]
-      → RouterFunction          [main output + 5 side outputs]
-      → JDBC sinks              [raw_measurements + 5 typed tables]
+      → direct stream filters   [raw_measurements + 5 typed tables]
+      → JDBC sinks
       → DLQ Kafka sink          [ErrorRecord → ems.dlq]
 """
 
@@ -64,11 +64,7 @@ from kafka_source import (
 from models import KafkaEnvelope, NormalisedRecord, ErrorRecord, MessageType
 from parser import parse_envelope
 from validators import validate_record
-from routing import (
-    RouterFunction,
-    TAG_ELECTRICAL, TAG_PROCESS_VAR, TAG_STEAM_FUEL,
-    TAG_WATER, TAG_ENERGY, TAG_ERROR,
-)
+from routing import TAG_ERROR
 from database import (
     raw_measurements_sink, RAW_TYPE,
     electrical_measurements_sink, ELECTRICAL_TYPE,
@@ -105,6 +101,26 @@ class ParseFunction(ProcessFunction):
 class ValidateFunction(ProcessFunction):
     def process_element(self, record: NormalisedRecord, ctx):
         yield validate_record(record)
+
+
+def is_electrical_record(record: NormalisedRecord) -> bool:
+    return record.message_type == MessageType.ELECTRICAL_PM
+
+
+def is_process_var_record(record: NormalisedRecord) -> bool:
+    return record.message_type == MessageType.PROCESS_VAR
+
+
+def is_steam_fuel_record(record: NormalisedRecord) -> bool:
+    return record.message_type == MessageType.STEAM_FUEL
+
+
+def is_water_record(record: NormalisedRecord) -> bool:
+    return record.message_type == MessageType.WATER_AGG
+
+
+def is_energy_record(record: NormalisedRecord) -> bool:
+    return record.message_type == MessageType.ENERGY_AGG
 
 
 def main():
@@ -184,44 +200,44 @@ def main():
         .name("Validate")
     )
 
-    # ── Step 3: Route ─────────────────────────────────────────────────────────
-    routed_stream = (
-        validated_stream
-        .process(RouterFunction(), output_type=Types.PICKLED_BYTE_ARRAY())
-        .name("Route by message type")
-    )
-
     # ── Step 4: Sinks ─────────────────────────────────────────────────────────
     # 4a. ems.raw_measurements — every record, valid or not
-    routed_stream \
+    validated_stream \
         .map(to_raw_row, output_type=RAW_TYPE) \
         .add_sink(raw_measurements_sink()) \
         .name("→ ems.raw_measurements")
 
-    # 4b. Typed side-output sinks
-    routed_stream.get_side_output(TAG_ELECTRICAL) \
+    # 4b. Typed sinks branch from the validated stream. The raw sink already
+    # proves this stream carries parsed records; filtering here avoids relying
+    # on PyFlink side-output serialization for normal table routing.
+    validated_stream \
+        .filter(is_electrical_record) \
         .filter(lambda r: r.ids.tag_id is not None) \
         .map(to_electrical_row, output_type=ELECTRICAL_TYPE) \
         .add_sink(electrical_measurements_sink()) \
         .name("→ ems.electrical_measurements")
 
-    routed_stream.get_side_output(TAG_PROCESS_VAR) \
+    validated_stream \
+        .filter(is_process_var_record) \
         .filter(lambda r: r.ids.tag_id is not None) \
         .map(to_process_var_row, output_type=PROCESS_VAR_TYPE) \
         .add_sink(process_variables_sink()) \
         .name("→ ems.process_variables")
 
-    routed_stream.get_side_output(TAG_STEAM_FUEL) \
+    validated_stream \
+        .filter(is_steam_fuel_record) \
         .map(to_steam_fuel_row, output_type=STEAM_FUEL_TYPE) \
         .add_sink(steam_fuel_sink()) \
         .name("→ ems.steam_fuel_measurements")
 
-    routed_stream.get_side_output(TAG_WATER) \
+    validated_stream \
+        .filter(is_water_record) \
         .map(to_water_row, output_type=WATER_TYPE) \
         .add_sink(water_consumption_sink()) \
         .name("→ ems.water_consumption")
 
-    routed_stream.get_side_output(TAG_ENERGY) \
+    validated_stream \
+        .filter(is_energy_record) \
         .map(to_energy_row, output_type=ENERGY_TYPE) \
         .add_sink(energy_consumption_sink()) \
         .name("→ ems.energy_consumption")
