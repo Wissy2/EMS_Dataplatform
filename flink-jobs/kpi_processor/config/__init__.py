@@ -1,0 +1,2 @@
+"""KPI configuration loading."""
+

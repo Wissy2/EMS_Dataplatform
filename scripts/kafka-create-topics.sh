@@ -50,5 +50,12 @@ echo "📦 Creating shared dead-letter topic..."
 create_topic "ems.dlq" 2
 
 echo ""
+echo "Creating normalized KPI input topics..."
+create_topic "ems.normalized.electrical_measurements" 4
+create_topic "ems.normalized.process_variables" 4
+create_topic "ems.normalized.steam_fuel_measurements" 2
+create_topic "ems.normalized.water_consumption" 2
+
+echo ""
 echo "✅ All done. Current EMS topics:"
 kafka-topics --bootstrap-server "$BROKER" --list | grep "^ems\." | sort
