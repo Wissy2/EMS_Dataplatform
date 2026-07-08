@@ -96,7 +96,10 @@ class ParseFunction(ProcessFunction):
                 "Parse error [%s] offset=%d: %s",
                 error.error_type, error.offset, error.error_message
             )
-            ctx.output(TAG_ERROR, error)
+            # BUGFIX: ctx.output(...) doesn't exist on PyFlink's Context —
+            # see routing.py for the full explanation. Side outputs are
+            # emitted by yielding (OutputTag, value), not via ctx.output().
+            yield TAG_ERROR, error
         else:
             yield record
 
