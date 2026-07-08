@@ -1,0 +1,25 @@
+{
+  "window_size": "1 MINUTE",
+  "rolling_peak_window": "15 MINUTE",
+  "rolling_energy_window": "60 MINUTE",
+  "electricity_tariff_per_kwh": 1.15,
+  "fuel_price_per_unit": 7.5,
+  "water_tariff_per_m3": 4.2,
+  "co2_emission_factor_kg_per_kwh": 0.62,
+  "max_expected_power_kw": 1000.0,
+  "alarm_thresholds": {
+    "min_power_factor": 0.9,
+    "max_thd_voltage": 5.0,
+    "max_thd_current": 8.0,
+    "max_voltage_cv": 0.02,
+    "max_voltage_unbalance_percent": 2.0,
+    "max_current_unbalance_percent": 10.0
+  },
+  "topics": {
+    "electrical": "ems.normalized.electrical_measurements",
+    "process_variables": "ems.normalized.process_variables",
+    "steam_fuel": "ems.normalized.steam_fuel_measurements",
+    "water": "ems.normalized.water_consumption"
+  }
+}
+

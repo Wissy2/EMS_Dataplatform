@@ -1,0 +1,2 @@
+"""KPI dataclasses and constants."""
+

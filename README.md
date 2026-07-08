@@ -27,6 +27,10 @@ docker compose up -d
 ## submit the job 
 >docker exec flink-jobmanager flink run    --python /opt/flink/jobs/raw_processor/main.py    --pyFiles /opt/flink/jobs/raw_processor/    -d
 
+## Analytics / KPI Processor
+## submit the job
+>docker exec flink-jobmanager flink run    --python /opt/flink/jobs/kpi_processor/kpi_job.py    --pyFiles /opt/flink/jobs/kpi_processor/    -d
+
 ## Verify on FLink UI
 Open http://localhost:8081
 

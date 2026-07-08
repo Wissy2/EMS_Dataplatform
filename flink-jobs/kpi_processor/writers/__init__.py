@@ -1,0 +1,2 @@
+"""KPI sink DDL builders."""
+
