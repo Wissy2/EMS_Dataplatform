@@ -31,6 +31,24 @@ KAFKA_SOURCE_TOPICS = [
 # Dead-letter topic for unparseable messages
 KAFKA_DLQ_TOPIC     = os.environ.get("KAFKA_DLQ_TOPIC", "ems.dlq")
 
+# Normalized streams consumed by the Analytics/KPI processor.
+KAFKA_NORMALIZED_ELECTRICAL_TOPIC = os.environ.get(
+    "KAFKA_NORMALIZED_ELECTRICAL_TOPIC",
+    "ems.normalized.electrical_measurements",
+)
+KAFKA_NORMALIZED_PROCESS_VAR_TOPIC = os.environ.get(
+    "KAFKA_NORMALIZED_PROCESS_VAR_TOPIC",
+    "ems.normalized.process_variables",
+)
+KAFKA_NORMALIZED_STEAM_FUEL_TOPIC = os.environ.get(
+    "KAFKA_NORMALIZED_STEAM_FUEL_TOPIC",
+    "ems.normalized.steam_fuel_measurements",
+)
+KAFKA_NORMALIZED_WATER_TOPIC = os.environ.get(
+    "KAFKA_NORMALIZED_WATER_TOPIC",
+    "ems.normalized.water_consumption",
+)
+
 # ── TimescaleDB ───────────────────────────────────────────────────────────────
 TIMESCALE_HOST      = os.environ.get("TIMESCALE_HOST", "timescaledb")
 TIMESCALE_PORT      = int(os.environ.get("TIMESCALE_PORT", "5432"))
