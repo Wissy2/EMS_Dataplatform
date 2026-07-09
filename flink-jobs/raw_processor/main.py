@@ -59,7 +59,12 @@ from metadata import CACHE
 from kafka_source import (
     build_kafka_envelope_stream,
     build_kafka_dlq_sink,
+    build_json_topic_sink,
     error_record_to_json,
+    electrical_record_to_json,
+    process_var_record_to_json,
+    steam_fuel_record_to_json,
+    water_record_to_json,
 )
 from models import KafkaEnvelope, NormalisedRecord, ErrorRecord, MessageType
 from parser import parse_envelope
@@ -218,11 +223,25 @@ def main():
         .name("→ ems.electrical_measurements")
 
     validated_stream \
+        .filter(is_electrical_record) \
+        .filter(lambda r: r.ids.tag_id is not None) \
+        .map(electrical_record_to_json, output_type=Types.STRING()) \
+        .sink_to(build_json_topic_sink(config.KAFKA_NORMALIZED_ELECTRICAL_TOPIC)) \
+        .name("→ ems.normalized.electrical_measurements")
+
+    validated_stream \
         .filter(is_process_var_record) \
         .filter(lambda r: r.ids.tag_id is not None) \
         .map(to_process_var_row, output_type=PROCESS_VAR_TYPE) \
         .add_sink(process_variables_sink()) \
         .name("→ ems.process_variables")
+
+    validated_stream \
+        .filter(is_process_var_record) \
+        .filter(lambda r: r.ids.tag_id is not None) \
+        .map(process_var_record_to_json, output_type=Types.STRING()) \
+        .sink_to(build_json_topic_sink(config.KAFKA_NORMALIZED_PROCESS_VAR_TOPIC)) \
+        .name("→ ems.normalized.process_variables")
 
     validated_stream \
         .filter(is_steam_fuel_record) \
@@ -231,10 +250,22 @@ def main():
         .name("→ ems.steam_fuel_measurements")
 
     validated_stream \
+        .filter(is_steam_fuel_record) \
+        .map(steam_fuel_record_to_json, output_type=Types.STRING()) \
+        .sink_to(build_json_topic_sink(config.KAFKA_NORMALIZED_STEAM_FUEL_TOPIC)) \
+        .name("→ ems.normalized.steam_fuel_measurements")
+
+    validated_stream \
         .filter(is_water_record) \
         .map(to_water_row, output_type=WATER_TYPE) \
         .add_sink(water_consumption_sink()) \
         .name("→ ems.water_consumption")
+
+    validated_stream \
+        .filter(is_water_record) \
+        .map(water_record_to_json, output_type=Types.STRING()) \
+        .sink_to(build_json_topic_sink(config.KAFKA_NORMALIZED_WATER_TOPIC)) \
+        .name("→ ems.normalized.water_consumption")
 
     validated_stream \
         .filter(is_energy_record) \

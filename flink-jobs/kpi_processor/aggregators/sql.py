@@ -46,7 +46,8 @@ def register_sources(t_env, settings: KpiSettings) -> None:
             'properties.group.id' = '{group}',
             'scan.startup.mode' = '{startup}',
             'format' = 'json',
-            'json.ignore-parse-errors' = 'true'
+            'json.ignore-parse-errors' = 'true',
+            'json.timestamp-format.standard' = 'ISO-8601'
         )
         """,
         f"""
@@ -74,7 +75,8 @@ def register_sources(t_env, settings: KpiSettings) -> None:
             'properties.group.id' = '{group}-pv',
             'scan.startup.mode' = '{startup}',
             'format' = 'json',
-            'json.ignore-parse-errors' = 'true'
+            'json.ignore-parse-errors' = 'true',
+            'json.timestamp-format.standard' = 'ISO-8601'
         )
         """,
         f"""
@@ -98,7 +100,8 @@ def register_sources(t_env, settings: KpiSettings) -> None:
             'properties.group.id' = '{group}-steam-fuel',
             'scan.startup.mode' = '{startup}',
             'format' = 'json',
-            'json.ignore-parse-errors' = 'true'
+            'json.ignore-parse-errors' = 'true',
+            'json.timestamp-format.standard' = 'ISO-8601'
         )
         """,
         f"""
@@ -115,7 +118,8 @@ def register_sources(t_env, settings: KpiSettings) -> None:
             'properties.group.id' = '{group}-water',
             'scan.startup.mode' = '{startup}',
             'format' = 'json',
-            'json.ignore-parse-errors' = 'true'
+            'json.ignore-parse-errors' = 'true',
+            'json.timestamp-format.standard' = 'ISO-8601'
         )
         """,
     ]

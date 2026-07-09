@@ -40,7 +40,7 @@ from pyflink.common.serialization import SimpleStringSchema
 from pyflink.table import StreamTableEnvironment
 
 import config
-from models import KafkaEnvelope, ErrorRecord
+from models import KafkaEnvelope, ErrorRecord, NormalisedRecord
 
 log = logging.getLogger(__name__)
 
@@ -168,15 +168,98 @@ def error_record_to_json(err: ErrorRecord) -> str:
 
 def build_kafka_dlq_sink() -> KafkaSink:
     """KafkaSink that writes ErrorRecord (as JSON) to the configured DLQ topic."""
+    return build_json_topic_sink(config.KAFKA_DLQ_TOPIC)
+
+
+def build_json_topic_sink(topic: str) -> KafkaSink:
+    """KafkaSink that writes JSON strings to a fixed Kafka topic."""
     return (
         KafkaSink.builder()
         .set_bootstrap_servers(config.KAFKA_BROKER)
         .set_record_serializer(
             KafkaRecordSerializationSchema.builder()
-            .set_topic(config.KAFKA_DLQ_TOPIC)
+            .set_topic(topic)
             .set_value_serialization_schema(SimpleStringSchema())
             .build()
         )
         .set_delivery_guarantee(DeliveryGuarantee.AT_LEAST_ONCE)
         .build()
     )
+
+
+def _event_time_iso(record: NormalisedRecord) -> str:
+    return record.event_time.replace(tzinfo=None).isoformat(timespec="milliseconds")
+
+
+def electrical_record_to_json(record: NormalisedRecord) -> str:
+    e = record.electrical
+    return json.dumps({
+        "event_time": _event_time_iso(record),
+        "tag_id": record.ids.tag_id,
+        "plant_id": record.ids.plant_id,
+        "line_id": record.ids.line_id,
+        "area_id": record.ids.area_id,
+        "frequency": e.frequency,
+        "voltage_l1n": e.voltage_l1n,
+        "voltage_l2n": e.voltage_l2n,
+        "voltage_l3n": e.voltage_l3n,
+        "current_l1": e.current_l1,
+        "current_l2": e.current_l2,
+        "current_l3": e.current_l3,
+        "thd_voltage": e.thd_voltage,
+        "thd_current": e.thd_current,
+        "power_factor": e.power_factor,
+        "active_power_kw": e.active_power_kw,
+        "reactive_power_kvar": e.reactive_power_kvar,
+        "apparent_power_kva": e.apparent_power_kva,
+        "energy_consumption_kwh": e.energy_consumption_kwh,
+        "breaker_status": e.breaker_status,
+        "alarm_trip": e.alarm_trip,
+    })
+
+
+def process_var_record_to_json(record: NormalisedRecord) -> str:
+    p = record.process_var
+    return json.dumps({
+        "event_time": _event_time_iso(record),
+        "tag_id": record.ids.tag_id,
+        "plant_id": record.ids.plant_id,
+        "line_id": record.ids.line_id,
+        "area_id": record.ids.area_id,
+        "belt_speed": p.belt_speed,
+        "pump_speed": p.pump_speed,
+        "agitator_speed": p.agitator_speed,
+        "flow": p.flow,
+        "instant_flow": p.instant_flow,
+        "temperature": p.temperature,
+        "air_pressure": p.air_pressure,
+        "air_flow": p.air_flow,
+        "speed": p.speed,
+        "status": p.status,
+    })
+
+
+def steam_fuel_record_to_json(record: NormalisedRecord) -> str:
+    s = record.steam_fuel
+    return json.dumps({
+        "event_time": _event_time_iso(record),
+        "plant_id": record.ids.plant_id,
+        "line_id": record.ids.line_id,
+        "steam_flow_rate": s.steam_flow_rate,
+        "steam_totalizer": s.steam_totalizer,
+        "steam_pressure": s.steam_pressure,
+        "steam_temperature": s.steam_temperature,
+        "fuel_flow_rate": s.fuel_flow_rate,
+        "fuel_totalizer": s.fuel_totalizer,
+        "fuel_pressure": s.fuel_pressure,
+        "fuel_temperature": s.fuel_temperature,
+    })
+
+
+def water_record_to_json(record: NormalisedRecord) -> str:
+    return json.dumps({
+        "event_time": _event_time_iso(record),
+        "plant_id": record.ids.plant_id,
+        "line_id": record.ids.line_id,
+        "total_water_m3": record.water_agg.total_water_m3 if record.water_agg else None,
+    })

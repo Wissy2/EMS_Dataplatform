@@ -114,10 +114,11 @@ services:
       - NO_GCP_PROBING=true
       - PYTHONPATH=/usr/local/lib/python3.10/dist-packages
       - KAFKA_BROKER=kafka:9092
+      - FLINK_PARALLELISM=1
       - |
         FLINK_PROPERTIES=
         jobmanager.rpc.address: flink-jobmanager
-        parallelism.default: 2
+        parallelism.default: 1
     volumes:
       - ./flink-jobs:/opt/flink/jobs
     networks:
@@ -133,10 +134,11 @@ services:
     environment:
       - PYTHONPATH=/usr/local/lib/python3.10/dist-packages
       - KAFKA_BROKER=kafka:9092
+      - FLINK_PARALLELISM=1
       - |
         FLINK_PROPERTIES= jobmanager.rpc.address: flink-jobmanager
         taskmanager.numberOfTaskSlots: 2
-        parallelism.default: 2
+        parallelism.default: 1
     networks:
       - iot-net
 

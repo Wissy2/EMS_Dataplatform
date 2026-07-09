@@ -28,8 +28,22 @@ docker compose up -d
 >docker exec flink-jobmanager flink run    --python /opt/flink/jobs/raw_processor/main.py    --pyFiles /opt/flink/jobs/raw_processor/    -d
 
 ## Analytics / KPI Processor
+## If this project was started before the wide KPI tables were added, apply the KPI schema once
+>powershell -ExecutionPolicy Bypass -File .\scripts\apply-kpi-output-schema.ps1
+
 ## submit the job
 >docker exec flink-jobmanager flink run    --python /opt/flink/jobs/kpi_processor/kpi_job.py    --pyFiles /opt/flink/jobs/kpi_processor/    -d
+
+## Low-resource backfill workflow
+The KPI processor reads the normalized Kafka topics written by the raw processor. You do not need to keep both Flink jobs running at the same time:
+
+1. Start the stack.
+2. Run the raw processor until data appears in `ems.raw_measurements` and the normalized topics.
+3. Cancel/stop the raw processor in the Flink UI or CLI.
+4. Run the KPI processor. Its default `KAFKA_START_OFFSET=earliest` lets it consume retained normalized Kafka data.
+
+If the KPI processor has already used the default consumer group, use a fresh group id for a replay:
+>docker exec -e KPI_KAFKA_GROUP_ID=ems-kpi-backfill-001 flink-jobmanager flink run    --python /opt/flink/jobs/kpi_processor/kpi_job.py    --pyFiles /opt/flink/jobs/kpi_processor/    -d
 
 ## Verify on FLink UI
 Open http://localhost:8081
@@ -40,6 +54,7 @@ Open http://localhost:8081
 ## Inside Timescaledb container 
 >\dt ems.*
 >SELECT * FROM ems.raw_measurements ORDER BY ingestion_timestamp DESC;
+>SELECT * FROM ems.equipment_kpis ORDER BY window_end DESC;
 ## To quit 
 >\q
 
